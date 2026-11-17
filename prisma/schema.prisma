@@ -1,0 +1,628 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum UserRole {
+  CUSTOMER
+  SUPPORT_AGENT
+  AUDITOR
+  ADMIN
+  SUPER_ADMIN
+}
+
+enum UserStatus {
+  PENDING_VERIFICATION
+  ACTIVE
+  SUSPENDED
+  LOCKED
+  CLOSED
+}
+
+enum AccountType {
+  SAVINGS
+  CURRENT
+  SALARY
+  BUSINESS
+  JOINT
+  FIXED_DEPOSIT
+}
+
+enum AccountStatus {
+  ACTIVE
+  DORMANT
+  FROZEN
+  CLOSED
+}
+
+enum TransactionType {
+  DEPOSIT
+  WITHDRAWAL
+  TRANSFER
+  BILL_PAYMENT
+  INTEREST
+  REFUND
+  CHARGE
+}
+
+enum TransactionStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  REVERSED
+  CANCELLED
+}
+
+enum BeneficiaryStatus {
+  PENDING_VERIFICATION
+  VERIFIED
+  REJECTED
+  BLOCKED
+}
+
+enum CardType {
+  DEBIT_PHYSICAL
+  DEBIT_VIRTUAL
+}
+
+enum CardStatus {
+  ACTIVE
+  FROZEN
+  BLOCKED
+  EXPIRED
+  REPLACED
+}
+
+enum LoanType {
+  PERSONAL
+  HOME
+  AUTO
+  EDUCATION
+  BUSINESS
+}
+
+enum LoanStatus {
+  APPLIED
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+  DISBURSED
+  CLOSED
+  DEFAULTED
+}
+
+enum InvestmentType {
+  MUTUAL_FUND
+  FIXED_DEPOSIT
+  RECURRING_DEPOSIT
+  STOCK
+}
+
+enum InvestmentStatus {
+  ACTIVE
+  MATURED
+  WITHDRAWN
+  CANCELLED
+}
+
+enum NotificationCategory {
+  SECURITY
+  TRANSACTION
+  OFFER
+  SYSTEM
+}
+
+enum NotificationChannel {
+  EMAIL
+  SMS
+  IN_APP
+  PUSH
+}
+
+enum KycStatus {
+  NOT_SUBMITTED
+  PENDING
+  VERIFIED
+  REJECTED
+  REQUIRES_REVIEW
+}
+
+enum KycDocumentType {
+  PAN
+  AADHAAR
+  SELFIE
+  ADDRESS_PROOF
+}
+
+enum OtpPurpose {
+  SIGNUP_VERIFICATION
+  LOGIN_2FA
+  TRANSFER_CONFIRMATION
+  PASSWORD_RESET
+  PHONE_VERIFICATION
+  CARD_PIN_CHANGE
+}
+
+enum SupportTicketStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+enum SupportTicketPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+// ---------------------------------------------------------------------------
+// Identity & Access
+// ---------------------------------------------------------------------------
+
+model User {
+  id               String     @id @default(uuid())
+  firstName        String
+  lastName         String
+  email            String     @unique
+  phone            String     @unique
+  passwordHash     String
+  role             UserRole   @default(CUSTOMER)
+  status           UserStatus @default(PENDING_VERIFICATION)
+  emailVerified    Boolean    @default(false)
+  phoneVerified    Boolean    @default(false)
+  twoFactorEnabled Boolean    @default(false)
+  twoFactorSecret  String?
+
+  dateOfBirth      DateTime?
+  occupation       String?
+  addressLine1     String?
+  addressLine2     String?
+  city             String?
+  state            String?
+  postalCode       String?
+  country          String?
+  nomineeName      String?
+  nomineeRelation  String?
+  emergencyContact String?
+  avatarUrl        String?
+
+  failedLoginAttempts Int       @default(0)
+  lockedUntil         DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  accounts            Account[]
+  sessions            Session[]
+  devices             Device[]
+  beneficiaries       Beneficiary[]
+  cards               Card[]
+  loans               Loan[]
+  investments         Investment[]
+  notifications       Notification[]
+  kyc                 Kyc?
+  supportTickets      SupportTicket[]
+  otpCodes            OtpCode[]
+  verificationTokens  VerificationToken[]
+  passwordResetTokens PasswordResetToken[]
+  auditLogs           AuditLog[]
+  loginHistory        LoginHistory[]
+  reviewedKycs        Kyc[]                @relation("KycReviewer")
+  pendingActions      PendingAction[]
+
+  @@index([role])
+  @@index([status])
+  @@map("users")
+}
+
+model Session {
+  id     String @id @default(uuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  refreshToken String  @unique
+  ipAddress    String?
+  userAgent    String?
+  deviceId     String?
+  device       Device? @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+
+  expiresAt DateTime
+  revokedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@map("sessions")
+}
+
+model Device {
+  id     String @id @default(uuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  fingerprint String
+  name        String?
+  os          String?
+  browser     String?
+  lastIp      String?
+  trusted     Boolean  @default(false)
+  lastSeenAt  DateTime @default(now())
+
+  createdAt DateTime @default(now())
+
+  sessions Session[]
+
+  @@unique([userId, fingerprint])
+  @@map("devices")
+}
+
+model LoginHistory {
+  id     String @id @default(uuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  ipAddress  String?
+  userAgent  String?
+  successful Boolean
+  reason     String?
+
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@map("login_history")
+}
+
+model VerificationToken {
+  id     String @id @default(uuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  tokenHash String    @unique
+  purpose   String
+  expiresAt DateTime
+  usedAt    DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@map("verification_tokens")
+}
+
+model PasswordResetToken {
+  id     String @id @default(uuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  ipAddress String?
+
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@map("password_reset_tokens")
+}
+
+model OtpCode {
+  id     String @id @default(uuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  codeHash   String
+  purpose    OtpPurpose
+  contextRef String?
+
+  attempts    Int @default(0)
+  maxAttempts Int @default(5)
+
+  expiresAt  DateTime
+  consumedAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@index([userId, purpose])
+  @@map("otp_codes")
+}
+
+// A multi-step action (transfer, card PIN change) that is waiting for its one-time code.
+// The browser only holds a signed reference to the row; the details live here, so the action can be
+// consumed exactly once and cannot be replayed from a copied cookie.
+enum PendingActionType {
+  TRANSFER
+  PIN_CHANGE
+}
+
+model PendingAction {
+  id         String            @id @default(uuid())
+  userId     String
+  user       User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type       PendingActionType
+  payload    Json
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime          @default(now())
+
+  @@index([userId, type])
+  @@map("pending_actions")
+}
+
+// ---------------------------------------------------------------------------
+// Banking core
+// ---------------------------------------------------------------------------
+
+model Account {
+  id     String @id @default(uuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  accountNumber String        @unique
+  ifsc          String
+  accountType   AccountType
+  balance       Decimal       @default(0) @db.Decimal(18, 2)
+  currency      String        @default("USD")
+  status        AccountStatus @default(ACTIVE)
+
+  dailyTransferLimit Decimal @default(10000) @db.Decimal(18, 2)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  sentTransactions     Transaction[] @relation("SenderAccount")
+  receivedTransactions Transaction[] @relation("ReceiverAccount")
+  cards                Card[]
+  loans                Loan[]
+  investments          Investment[]
+
+  @@index([userId])
+  @@map("accounts")
+}
+
+model Transaction {
+  id              String @id @default(uuid())
+  referenceNumber String @unique
+
+  type   TransactionType
+  status TransactionStatus @default(PENDING)
+
+  senderAccountId String?
+  senderAccount   Account? @relation("SenderAccount", fields: [senderAccountId], references: [id])
+
+  receiverAccountId String?
+  receiverAccount   Account? @relation("ReceiverAccount", fields: [receiverAccountId], references: [id])
+
+  receiverBeneficiaryId String?
+  receiverBeneficiary   Beneficiary? @relation(fields: [receiverBeneficiaryId], references: [id], onDelete: SetNull)
+
+  amount       Decimal  @db.Decimal(18, 2)
+  fee          Decimal  @default(0) @db.Decimal(18, 2)
+  balanceAfter Decimal? @db.Decimal(18, 2)
+  currency     String   @default("USD")
+
+  description   String?
+  failureReason String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([senderAccountId])
+  @@index([receiverAccountId])
+  @@index([receiverBeneficiaryId])
+  @@index([status])
+  @@map("transactions")
+}
+
+model Beneficiary {
+  id     String @id @default(uuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  nickname      String
+  bankName      String
+  accountNumber String
+  ifsc          String
+  status        BeneficiaryStatus @default(PENDING_VERIFICATION)
+
+  addedAt   DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  transactions Transaction[]
+
+  @@index([userId])
+  @@map("beneficiaries")
+}
+
+model Card {
+  id     String @id @default(uuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  accountId String
+  account   Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  cardNumberEncrypted String
+  cardNumberLastFour  String
+  expiryMonth         Int
+  expiryYear          Int
+  cvvEncrypted        String
+  pinHash             String?
+
+  type   CardType
+  status CardStatus @default(ACTIVE)
+
+  dailyLimit            Decimal @default(2000) @db.Decimal(18, 2)
+  onlinePaymentsEnabled Boolean @default(true)
+  internationalEnabled  Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([accountId])
+  @@map("cards")
+}
+
+model Loan {
+  id     String @id @default(uuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  accountId String?
+  account   Account? @relation(fields: [accountId], references: [id])
+
+  type   LoanType
+  status LoanStatus @default(APPLIED)
+
+  principal        Decimal @db.Decimal(18, 2)
+  interestRateApr  Decimal @db.Decimal(5, 2)
+  termMonths       Int
+  emiAmount        Decimal @db.Decimal(18, 2)
+  paidInstallments Int     @default(0)
+
+  appliedAt   DateTime  @default(now())
+  approvedAt  DateTime?
+  disbursedAt DateTime?
+  closedAt    DateTime?
+
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@map("loans")
+}
+
+model Investment {
+  id     String @id @default(uuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  accountId String?
+  account   Account? @relation(fields: [accountId], references: [id])
+
+  type   InvestmentType
+  status InvestmentStatus @default(ACTIVE)
+
+  principal          Decimal @db.Decimal(18, 2)
+  currentValue       Decimal @db.Decimal(18, 2)
+  expectedReturnRate Decimal @db.Decimal(5, 2)
+
+  startDate    DateTime  @default(now())
+  maturityDate DateTime?
+
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@map("investments")
+}
+
+// ---------------------------------------------------------------------------
+// KYC
+// ---------------------------------------------------------------------------
+
+model Kyc {
+  id     String @id @default(uuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  pan     String?
+  aadhaar String?
+  status  KycStatus @default(NOT_SUBMITTED)
+
+  submittedAt     DateTime?
+  reviewedAt      DateTime?
+  reviewedById    String?
+  reviewedBy      User?     @relation("KycReviewer", fields: [reviewedById], references: [id])
+  rejectionReason String?
+
+  documents KycDocument[]
+
+  @@map("kyc")
+}
+
+model KycDocument {
+  id    String @id @default(uuid())
+  kycId String
+  kyc   Kyc    @relation(fields: [kycId], references: [id], onDelete: Cascade)
+
+  type         KycDocumentType
+  fileUrl      String
+  ocrExtracted Json?
+
+  uploadedAt DateTime @default(now())
+
+  @@index([kycId])
+  @@map("kyc_documents")
+}
+
+// ---------------------------------------------------------------------------
+// Notifications & Support
+// ---------------------------------------------------------------------------
+
+model Notification {
+  id     String @id @default(uuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  category NotificationCategory
+  channel  NotificationChannel
+  title    String
+  body     String
+  readAt   DateTime?
+  metadata Json?
+
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@map("notifications")
+}
+
+model SupportTicket {
+  id     String @id @default(uuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  subject     String
+  description String
+  status      SupportTicketStatus   @default(OPEN)
+  priority    SupportTicketPriority @default(MEDIUM)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@map("support_tickets")
+}
+
+// ---------------------------------------------------------------------------
+// Audit
+// ---------------------------------------------------------------------------
+
+model AuditLog {
+  id     String  @id @default(uuid())
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  action     String
+  entityType String
+  entityId   String?
+  ipAddress  String?
+  userAgent  String?
+  metadata   Json?
+
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([entityType, entityId])
+  @@map("audit_logs")
+}
