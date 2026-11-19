@@ -70,7 +70,6 @@ A full-stack, production-style banking platform built with Next.js 15 (App Route
 | `npm run build` | Production build |
 | `npm run start` | Serve the production build (run `build` first) |
 | `npm run lint` | ESLint |
-| `npm test` | Run the Vitest unit test suite |
 
 ## Architecture
 
@@ -98,14 +97,6 @@ Server Actions live under `src/actions`, mirroring the same domain split (`actio
 - **Rate limiting**: in-memory, fixed-window (`lib/security/rate-limit.ts`). Fine for a single instance; back it with Redis before running more than one server process.
 - **IDOR protection**: every query that takes a client-supplied ID scopes it to the authenticated user's ID (customer-facing) or gates on staff role (admin-facing) — see any `lib/banking/queries.ts` or `actions/admin/*` function for the pattern.
 
-## Testing
-
-```bash
-npm test
-```
-
-Unit tests cover the pure-logic modules most worth protecting from regression: encryption round-trip and tamper detection, rate limiter behavior, admin permission logic, KYC field validation, and currency formatting. There is no component/E2E test suite committed to the repo — end-to-end flows were verified with ad hoc Playwright scripts during development, not checked in.
-
 ## Deployment
 
 1. Provision a PostgreSQL database and set `DATABASE_URL` (and every other variable in `.env.example`) on the host.
@@ -128,12 +119,6 @@ This app **does not integrate any real payment rails**. Transfers, deposits, car
 - KYC documents are stored as base64 data URLs directly in Postgres (no S3/blob storage) with simulated OCR extraction.
 - OTP codes are logged to the server console (`[mock-otp] ...`) instead of sent by SMS/email — there is no real delivery provider configured.
 
-## Current status & documentation
+## Status and limitations
 
-**Status (audit 2026-11-14, updated 2026-11-16):** Functional demo banking platform (Next.js 15.5.29 + Prisma + PostgreSQL). 106/106 tests pass (61 unit + 45 integration tests that run the real Server Actions against a throwaway database); type-check, lint and production build are clean. The audit's critical/high issues and the follow-up items are fixed and tested: 2FA bypass, `next` advisory, money-losing race conditions, session revocation, open redirect, **one-time codes and reset links are now e-mailed through Resend, sessions refresh silently (no more 15-minute logouts), transfers/PIN changes are single-use server-side records, and client IPs are only trusted behind a configured proxy.** Verified live on the production build with real e-mail (35/35 checks). Still NOT fully production-ready: e-mail to real customers needs a verified Resend domain, PII is not encrypted, rate limits are in-memory (single instance), remaining dependency advisories need Prisma 7 / Zod 4, and the UI has never been browser-tested. See PROJECT_CONTEXT.md.
-
-| Document | Purpose |
-|---|---|
-| [How to run.md](<How to run.md>) | Local setup, env vars, ports, troubleshooting |
-| [PROJECT_CONTEXT.md](PROJECT_CONTEXT.md) | Deep technical context for AI assistants and new developers |
-| [CLAUDE.md](CLAUDE.md) | Short entry point for AI tools |
+A working demo banking platform (Next.js, Prisma, PostgreSQL); all money is simulated. Before it could be used with real customers it would need: a verified e-mail sending domain (without one Resend only delivers to the account owner), encryption of personal data at rest, a shared store such as Redis for rate limits when more than one server runs, and upgrades for the remaining dependency advisories.
